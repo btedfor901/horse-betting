@@ -46,12 +46,41 @@ function norm(value: number | null, max: number, weight: number): number {
   return Math.min(weight, (value / max) * weight);
 }
 
+// ── Track condition ───────────────────────────────────────────────────────────
+export type TrackCondition = 'fast' | 'good' | 'yielding' | 'muddy' | 'sloppy' | 'heavy';
+
+export function isOffTrack(condition: TrackCondition): boolean {
+  return condition === 'muddy' || condition === 'sloppy' || condition === 'heavy' || condition === 'yielding';
+}
+
+// Off-track bonus/penalty based on run style and angles
+export function mudAdjustment(horse: Horse, condition: TrackCondition): number {
+  if (!isOffTrack(condition)) return 0;
+
+  let adj = 0;
+  const severity = condition === 'heavy' || condition === 'sloppy' ? 2 : 1;
+
+  // Run style: closers/stalkers avoid early mud kickback; speed horses get worn down
+  if (horse.runStyle === 'C') adj += 3 * severity / 2;
+  else if (horse.runStyle === 'S') adj += 2 * severity / 2;
+  else if (horse.runStyle === 'P') adj += 0.5 * severity / 2;
+  else if (horse.runStyle === 'E') adj -= 2 * severity / 2;
+
+  // Angle keywords from TwinSpires tips
+  const a = (horse.angles ?? '').toLowerCase();
+  if (a.includes('mudder') || a.includes('mud') || a.includes('wet') || a.includes('off track') || a.includes('off-track')) adj += 3;
+  if (a.includes('likes wet') || a.includes('good in') || a.includes('turf to dirt')) adj += 1.5;
+
+  return Math.max(-4, Math.min(5, adj));
+}
+
 // ── Individual horse scorer ───────────────────────────────────────────────────
 
 export function scoreHorse(
   horse: Horse,
   allHorses: Horse[],
   distance: string,
+  condition: TrackCondition = 'fast',
 ): HorseScore {
   const active = activeHorses(allHorses);
 
@@ -105,7 +134,7 @@ export function scoreHorse(
   }
   const paceScore = Math.min(10, paceLP + paceSetup);
 
-  // ── JOCKEY (0–10) ─────────────────────────────────────────────────────────
+  // ── JOCKEY (0–10, +2 hot streak bonus) ───────────────────────────────────
   let jockeyScore = 5;
   if (horse.jockeyWinPct !== null) {
     if (horse.jockeyWinPct >= 25) jockeyScore = 10;
@@ -115,6 +144,8 @@ export function scoreHorse(
     else if (horse.jockeyWinPct >= 7) jockeyScore = 3;
     else jockeyScore = 2;
   }
+  // Hot streak: jockey already won at this track today
+  if (horse.hotJockey) jockeyScore = Math.min(10, jockeyScore + 2);
 
   // ── TRAINER (0–10) ────────────────────────────────────────────────────────
   let trainerScore = 5;
@@ -156,8 +187,8 @@ export function scoreHorse(
     else valueScore = 1;                    // public bailing
   }
 
-  // ── ANGLE BONUS (0–3 extra pts) ───────────────────────────────────────────
-  const anglesLower = horse.angles.toLowerCase();
+  // ── ANGLE BONUS ───────────────────────────────────────────────────────────
+  const anglesLower = (horse.angles ?? '').toLowerCase();
   let angleBonus = 0;
   if (anglesLower.includes('horse for course')) angleBonus += 1.5;
   if (anglesLower.includes('clocker special')) angleBonus += 1.5;
@@ -165,9 +196,12 @@ export function scoreHorse(
   if (anglesLower.includes('best distance')) angleBonus += 1;
   if (anglesLower.includes('hot jockey')) angleBonus += 0.5;
 
+  // ── MUD ADJUSTMENT ────────────────────────────────────────────────────────
+  const mud = mudAdjustment(horse, condition);
+
   const rawTotal =
     speedScore + classScore + formScore + paceScore +
-    jockeyScore + trainerScore + postScore + valueScore + angleBonus;
+    jockeyScore + trainerScore + postScore + valueScore + angleBonus + mud;
 
   const totalScore = Math.min(100, Math.round(rawTotal * 10) / 10);
 
@@ -198,8 +232,8 @@ export function scoreHorse(
 
 // ── Score entire field ────────────────────────────────────────────────────────
 
-export function scoreField(horses: Horse[], distance: string): HorseScore[] {
-  const scores = horses.map(h => scoreHorse(h, horses, distance));
+export function scoreField(horses: Horse[], distance: string, condition: TrackCondition = 'fast'): HorseScore[] {
+  const scores = horses.map(h => scoreHorse(h, horses, distance, condition));
 
   // Model probabilities from score totals (active only)
   const activeScoreSum = scores

@@ -28,8 +28,8 @@ export const api = {
   getRace: (id: string) => fetchJSON(`/api/races/${id}`),
   updateHorses: (raceId: string, horses: object[]) =>
     fetchJSON(`/api/races/${raceId}/horses`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(horses) }),
-  analyzeRace: (raceId: string) =>
-    fetchJSON(`/api/races/${raceId}/analyze`, { method: 'POST' }),
+  analyzeRace: (raceId: string, trackCondition = 'fast') =>
+    fetchJSON(`/api/races/${raceId}/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trackCondition }) }),
   saveResults: (raceId: string, data: object) =>
     fetchJSON(`/api/races/${raceId}/results`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
 };

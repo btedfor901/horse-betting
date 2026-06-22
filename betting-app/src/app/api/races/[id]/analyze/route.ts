@@ -1,19 +1,36 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { scoreField, getRecommendation } from '@/lib/scoring';
+import { scoreField, getRecommendation, TrackCondition } from '@/lib/scoring';
 import { Horse } from '@/lib/types';
 
-export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    const body = await req.json().catch(() => ({}));
+    const trackCondition: TrackCondition = body.trackCondition ?? 'fast';
 
     const race = await prisma.race.findUnique({
       where: { id },
-      include: { horses: true },
+      include: { horses: true, raceDay: true },
     });
 
     if (!race) return NextResponse.json({ error: 'Race not found' }, { status: 404 });
     if (race.horses.length === 0) return NextResponse.json({ error: 'No horses to score' }, { status: 400 });
+
+    // Build hot jockey set: jockeys who have won an earlier race today at this track
+    const earlierRaces = await prisma.race.findMany({
+      where: { raceDayId: race.raceDayId, number: { lt: race.number } },
+      include: { result: true, horses: { select: { jockeyName: true } } },
+    });
+    const hotJockeys = new Set<string>();
+    for (const er of earlierRaces) {
+      if (!er.result?.winner) continue;
+      const winnerHorse = await prisma.horseEntry.findFirst({
+        where: { raceId: er.id, horseName: er.result.winner },
+        select: { jockeyName: true },
+      });
+      if (winnerHorse?.jockeyName) hotJockeys.add(winnerHorse.jockeyName.toLowerCase());
+    }
 
     // Map DB horses to the scoring engine's Horse type
     const horses: Horse[] = race.horses.map(h => ({
@@ -41,6 +58,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       avgDistance: h.avgDistance,
       angles: h.angles ?? '',
       scratched: h.scratched,
+      hotJockey: hotJockeys.has((h.jockeyName ?? '').toLowerCase()),
     }));
 
     const settings = await prisma.appSettings.upsert({
@@ -49,7 +67,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       update: {},
     });
 
-    const scores = scoreField(horses, race.distance);
+    const scores = scoreField(horses, race.distance, trackCondition);
     const rec = getRecommendation(horses, scores, {
       startingBankroll: settings.startingBankroll,
       currentBankroll: settings.currentBankroll,

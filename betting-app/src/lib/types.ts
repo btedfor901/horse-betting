@@ -36,6 +36,7 @@ export interface Horse {
   avgDistance: number | null;
   angles: string;
   scratched: boolean;
+  hotJockey?: boolean;
 }
 
 export interface HorseScore {

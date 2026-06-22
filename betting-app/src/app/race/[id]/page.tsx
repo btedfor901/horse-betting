@@ -387,6 +387,7 @@ export default function RacePage() {
   const [rec, setRec] = useState<BetRecommendation | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [trackCondition, setTrackCondition] = useState<'fast'|'good'|'yielding'|'muddy'|'sloppy'|'heavy'>('fast');
 
   useEffect(() => {
     api.getRace(id)
@@ -474,7 +475,7 @@ export default function RacePage() {
       setHorses(newHorses.map(h => ({ ...h, _key: h.id })));
 
       // POST analyze
-      const analysis = await api.analyzeRace(race.id) as { scores: HorseScore[]; recommendation: BetRecommendation };
+      const analysis = await api.analyzeRace(race.id, trackCondition) as { scores: HorseScore[]; recommendation: BetRecommendation };
       setScores(analysis.scores);
       setRec(analysis.recommendation);
 
@@ -565,13 +566,35 @@ export default function RacePage() {
           )}
 
           {horses.length > 0 && (
-            <div className="mt-4">
-              {error && <div className="text-red-400 text-xs mb-2">{error}</div>}
+            <div className="mt-4 space-y-3">
+              {/* Track condition */}
+              <div className="bg-slate-900 border border-slate-800 rounded-lg p-3">
+                <label className="text-xs font-semibold text-amber-400 uppercase tracking-wider block mb-2">Track Condition</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(['fast','good','yielding','muddy','sloppy','heavy'] as const).map(c => {
+                    const isOff = c === 'muddy' || c === 'sloppy' || c === 'heavy' || c === 'yielding';
+                    return (
+                      <button key={c} onClick={() => setTrackCondition(c)}
+                        className={`py-1.5 rounded text-xs font-semibold capitalize transition-colors ${
+                          trackCondition === c
+                            ? isOff ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white'
+                            : 'bg-slate-800 text-slate-400 hover:text-white'
+                        }`}>
+                        {c}
+                      </button>
+                    );
+                  })}
+                </div>
+                {(trackCondition === 'muddy' || trackCondition === 'sloppy' || trackCondition === 'heavy' || trackCondition === 'yielding') && (
+                  <p className="text-xs text-blue-400 mt-2">Off-track adjustments active — closers boosted, speed horses penalized</p>
+                )}
+              </div>
+              {error && <div className="text-red-400 text-xs">{error}</div>}
               <button onClick={saveAndAnalyze} disabled={saving}
                 className="w-full bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-900 font-bold py-2.5 rounded-lg text-sm transition-colors">
                 {saving ? 'Saving & Analyzing...' : 'Save & Analyze Race →'}
               </button>
-              <p className="text-slate-600 text-xs text-center mt-1">Saves all horse data and runs the scoring model</p>
+              <p className="text-slate-600 text-xs text-center">Saves all horse data and runs the scoring model</p>
             </div>
           )}
         </div>
