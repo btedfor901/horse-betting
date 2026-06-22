@@ -358,6 +358,64 @@ Extract pace figures for every horse. Return ONLY a JSON array:
     }
   }
 
+  // ── Summary tab: run style ───────────────────────────────────────────────
+  const sumImg = img('summary');
+  if (sumImg) {
+    const sumMsg = await claude.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2000,
+      messages: [{
+        role: 'user',
+        content: [
+          sumImg,
+          {
+            type: 'text',
+            text: `This is a TwinSpires Summary tab for Race ${raceNum}.
+Extract the Run Style for every horse. Return ONLY a JSON array:
+[{"horseName":"Name","runStyle":"E"}]
+- runStyle values: E (Early/Front-runner), P (Presser), S (Stalker), C (Closer)
+- The RUN STYLE column may show codes like E1, E2, P1, P2, S1, S2, C — map the first letter only (E, P, S, or C).
+- Return ONLY the JSON array, no explanation.`,
+          },
+        ],
+      }],
+    });
+    const sumData = parseJSON(sumMsg.content[0]?.text ?? '', []);
+    for (const s of sumData) {
+      const h = horses.find(h => h.horseName === s.horseName);
+      if (h && s.runStyle) h.runStyle = s.runStyle;
+    }
+  }
+
+  // ── Tips tab: angles ─────────────────────────────────────────────────────
+  const tipsImg = img('tips');
+  if (tipsImg) {
+    const tipsMsg = await claude.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2000,
+      messages: [{
+        role: 'user',
+        content: [
+          tipsImg,
+          {
+            type: 'text',
+            text: `This is a TwinSpires Tips tab for Race ${raceNum}.
+Extract the Angles listed for every horse. Return ONLY a JSON array:
+[{"horseName":"Name","angles":"Hot Jockey, Key Trainer"}]
+- angles is a comma-separated string of all angle labels shown (e.g. "Hot Jockey", "Key Trainer", "Best Distance", "Top Pick", "Hot Trainer")
+- If a horse has no angles, use null.
+- Return ONLY the JSON array, no explanation.`,
+          },
+        ],
+      }],
+    });
+    const tipsData = parseJSON(tipsMsg.content[0]?.text ?? '', []);
+    for (const t of tipsData) {
+      const h = horses.find(h => h.horseName === t.horseName);
+      if (h && t.angles) h.angles = t.angles;
+    }
+  }
+
   return {
     distance: advData.distance || 'Unknown',
     surface: advData.surface || 'dirt',
