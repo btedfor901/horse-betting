@@ -451,12 +451,20 @@ async function findTrackBaseUrl(page, track) {
   return url;
 }
 
-async function captureTab(page, url, filePath, r2Key) {
+// Tab label as it appears in the TwinSpires UI (for clicking)
+const TAB_LABELS = {
+  advanced: 'ADVANCED',
+  speed:    'SPEED',
+  class:    'CLASS',
+  pace:     'PACE',
+  tips:     'TIPS',
+  summary:  'SUMMARY',
+};
+
+async function captureTab(page, filePath, r2Key) {
   try {
-    const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
-    if (resp && resp.status() === 404) return false;
     await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
-    await page.waitForTimeout(900);
+    await page.waitForTimeout(700);
     await page.screenshot({ path: filePath, fullPage: false });
     await uploadToR2(filePath, r2Key);
     return true;
@@ -469,7 +477,7 @@ async function captureTrack(page, track) {
   const baseUrl = await findTrackBaseUrl(page, track);
   if (!baseUrl) return;
 
-  // Probe how many races exist
+  // Probe how many races exist by navigating via URL (advanced tab works fine by URL)
   const racesToCapture = [];
   for (let r = 1; r <= MAX_RACES; r++) {
     const testUrl = urlForTab(urlForRace(baseUrl, r), 'advanced');
@@ -492,12 +500,30 @@ async function captureTrack(page, track) {
     console.log(`\n  [Race ${raceNum}]`);
     const dir = saveDir(track.name, raceNum);
 
-    // Capture all tabs
+    // Navigate to the race (lands on Advanced by default)
+    const raceUrl = urlForTab(urlForRace(baseUrl, raceNum), 'advanced');
+    await page.goto(raceUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
+    await page.waitForTimeout(800);
+
+    // Dismiss cookie banner if present
+    await page.locator('button:has-text("I Understand"), button:has-text("Accept All")')
+      .first().click({ timeout: 3000 }).catch(() => {});
+
+    // Capture each tab by clicking the tab button in the UI
     for (const tab of TABS) {
-      const tabUrl = urlForTab(urlForRace(baseUrl, raceNum), tab);
       const filePath = path.join(dir, `${tab}.png`);
       const r2Key = `screenshots/${TODAY}/${slugify(track.name)}/race-${raceNum}/${tab}.png`;
-      const ok = await captureTab(page, tabUrl, filePath, r2Key);
+
+      const label = TAB_LABELS[tab] ?? tab.toUpperCase();
+      // Click the tab button (e.g. "ADVANCED", "TIPS", "SUMMARY")
+      const tabBtn = page.locator(`button:has-text("${label}"), a:has-text("${label}"), [class*="tab"]:has-text("${label}")`).first();
+      if (await tabBtn.count()) {
+        await tabBtn.click({ force: true });
+        await page.waitForTimeout(600);
+      }
+
+      const ok = await captureTab(page, filePath, r2Key);
       console.log(ok ? `    ✓ ${tab}.png${r2 ? ' → R2' : ''}` : `    – ${tab} not available`);
     }
 
