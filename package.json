@@ -6,6 +6,7 @@
     "screenshots": "node grab-screenshots.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "@aws-sdk/client-s3": "^3.0.0",
     "dotenv": "^17.4.2",
     "playwright": "^1.52.0"
