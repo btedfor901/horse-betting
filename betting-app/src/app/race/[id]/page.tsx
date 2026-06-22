@@ -299,6 +299,7 @@ const SCREENSHOT_TABS = [
   { key: 'class',    label: 'CLS' },
   { key: 'pace',     label: 'PCE' },
   { key: 'tips',     label: 'TPS' },
+  { key: 'summary',  label: 'SUM' },
 ];
 
 function slugify(str: string) {

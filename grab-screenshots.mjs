@@ -78,7 +78,7 @@ const TRACKS = selectedNames
   ? ALL_TRACKS.filter(t => selectedNames.includes(t.name))
   : ALL_TRACKS;
 
-const TABS = LIVE_ONLY ? ['advanced'] : ['advanced', 'speed', 'class', 'pace', 'tips'];
+const TABS = LIVE_ONLY ? ['advanced'] : ['advanced', 'speed', 'class', 'pace', 'tips', 'summary'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function slugify(str) {
