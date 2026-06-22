@@ -1,0 +1,21 @@
+# Environment / secrets
+.env
+.env.local
+.env*.local
+
+# Dependencies
+node_modules/
+
+# Next.js build output
+betting-app/.next/
+betting-app/out/
+
+# Screenshots (served from R2, not git)
+betting-app/public/screenshots/
+
+# Test files
+test-r2.mjs
+
+# OS
+.DS_Store
+Thumbs.db

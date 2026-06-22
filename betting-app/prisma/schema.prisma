@@ -1,0 +1,168 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model RaceDay {
+  id                String             @id @default(cuid())
+  date              String
+  track             String             @default("Churchill Downs")
+  races             Race[]
+  bankrollSnapshots BankrollSnapshot[]
+  createdAt         DateTime           @default(now())
+
+  @@unique([date, track])
+}
+
+model Race {
+  id             String             @id @default(cuid())
+  raceDayId      String
+  raceDay        RaceDay            @relation(fields: [raceDayId], references: [id], onDelete: Cascade)
+  number         Int
+  postTime       String?
+  distance       String
+  surface        String
+  raceType       String
+  purse          String?
+  conditions     String?
+  horses         HorseEntry[]
+  scores         ModelScore[]
+  recommendation BetRecommendation?
+  result         RaceResult?
+  importLog      DataImportLog?
+  createdAt      DateTime           @default(now())
+
+  @@unique([raceDayId, number])
+}
+
+model HorseEntry {
+  id              String      @id @default(cuid())
+  raceId          String
+  race            Race        @relation(fields: [raceId], references: [id], onDelete: Cascade)
+  programNumber   String?
+  postPosition    Int
+  horseName       String
+  morningLineOdds String?
+  currentOdds     String?
+  jockeyName      String?
+  jockeyWinPct    Float?
+  trainerName     String?
+  trainerWinPct   Float?
+  owner           String?
+  weight          Int?
+  medication      String?
+  equipment       String?
+  runStyle        String?
+  daysOff         Int?
+  avgSpeed        Float?
+  bestSpeed       Float?
+  backSpeed       Float?
+  speedLR         Float?
+  primePower      Float?
+  avgClass        Float?
+  lastClass       Float?
+  earlyPace1      Float?
+  earlyPace2      Float?
+  latePace        Float?
+  avgDistance     Float?
+  angles          String?
+  scratched       Boolean     @default(false)
+  score           ModelScore?
+  createdAt       DateTime    @default(now())
+}
+
+model ModelScore {
+  id                 String     @id @default(cuid())
+  raceId             String
+  race               Race       @relation(fields: [raceId], references: [id], onDelete: Cascade)
+  horseEntryId       String     @unique
+  horse              HorseEntry @relation(fields: [horseEntryId], references: [id], onDelete: Cascade)
+  speedScore         Float
+  classScore         Float
+  formScore          Float
+  paceScore          Float
+  jockeyScore        Float
+  trainerScore       Float
+  postScore          Float
+  valueScore         Float
+  totalScore         Float
+  rank               Int
+  confidence         String
+  modelProbability   Float
+  impliedProbability Float
+  valueRating        Float
+  scoredAt           DateTime   @default(now())
+}
+
+model BetRecommendation {
+  id                 String   @id @default(cuid())
+  raceId             String   @unique
+  race               Race     @relation(fields: [raceId], references: [id], onDelete: Cascade)
+  betType            String
+  horses             String
+  horseIds           String
+  totalCost          Float
+  costPerCombination Float
+  confidence         String
+  reasoning          String
+  scoreLead          Float
+  createdAt          DateTime @default(now())
+}
+
+model RaceResult {
+  id               String    @id @default(cuid())
+  raceId           String    @unique
+  race             Race      @relation(fields: [raceId], references: [id], onDelete: Cascade)
+  winner           String
+  orderOfFinish    String
+  betPlaced        String
+  amountWagered    Float
+  amountReturned   Float
+  profitLoss       Float
+  winPayout        Float?
+  placePayout      Float?
+  showPayout       Float?
+  exactaPayout     Float?
+  trifectaPayout   Float?
+  superfectaPayout Float?
+  notes            String?
+  importedAt       DateTime?
+  createdAt        DateTime  @default(now())
+}
+
+model BankrollSnapshot {
+  id        String   @id @default(cuid())
+  raceDayId String
+  raceDay   RaceDay  @relation(fields: [raceDayId], references: [id], onDelete: Cascade)
+  balance   Float
+  delta     Float
+  reason    String?
+  createdAt DateTime @default(now())
+}
+
+model DataImportLog {
+  id             String   @id @default(cuid())
+  raceId         String?  @unique
+  race           Race?    @relation(fields: [raceId], references: [id])
+  source         String
+  importedAt     DateTime @default(now())
+  success        Boolean
+  errorMessage   String?
+  rawData        Json?
+  normalizedData Json?
+}
+
+model AppSettings {
+  id                String   @id @default("singleton")
+  startingBankroll  Float    @default(1000)
+  currentBankroll   Float    @default(1000)
+  unitSize          Float    @default(20)
+  maxBetPerRace     Float    @default(40)
+  dailyStopLoss     Float    @default(100)
+  dailyProfitTarget Float    @default(150)
+  maxBetsPerDay     Int      @default(5)
+  updatedAt         DateTime @updatedAt
+}
