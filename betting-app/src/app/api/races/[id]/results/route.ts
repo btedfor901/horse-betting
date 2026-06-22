@@ -8,6 +8,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const {
       winner,
+      winnerModelRank,
       orderOfFinish,
       betPlaced,
       amountWagered,
@@ -28,6 +29,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       create: {
         raceId: id,
         winner: winner ?? '',
+        winnerModelRank: winnerModelRank ?? null,
         orderOfFinish: JSON.stringify(orderOfFinish ?? []),
         betPlaced: betPlaced ?? 'no-bet',
         amountWagered: amountWagered ?? 0,
@@ -43,6 +45,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       },
       update: {
         winner: winner ?? '',
+        winnerModelRank: winnerModelRank ?? null,
         orderOfFinish: JSON.stringify(orderOfFinish ?? []),
         betPlaced: betPlaced ?? 'no-bet',
         amountWagered: amountWagered ?? 0,

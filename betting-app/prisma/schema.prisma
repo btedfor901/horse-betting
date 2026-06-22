@@ -117,6 +117,7 @@ model RaceResult {
   raceId           String    @unique
   race             Race      @relation(fields: [raceId], references: [id], onDelete: Cascade)
   winner           String
+  winnerModelRank  Int?
   orderOfFinish    String
   betPlaced        String
   amountWagered    Float

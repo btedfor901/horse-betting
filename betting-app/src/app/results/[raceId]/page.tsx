@@ -118,8 +118,16 @@ export default function ResultsPage() {
     // Per-type payouts for the API
     const sum = (type: string) => validBets.filter(b => b.type === type).reduce((s, b) => s + (parseFloat(b.returned) || 0), 0);
 
+    // Compute which model rank the winner held
+    const winnerModelRank = (() => {
+      if (!winner || scoredHorses.length === 0) return null;
+      const idx = scoredHorses.findIndex(s => s.horseName === winner);
+      return idx >= 0 ? idx + 1 : null;
+    })();
+
     await api.saveResults(race.id, {
       winner,
+      winnerModelRank,
       orderOfFinish: orderRaw.split(',').map(s => s.trim()).filter(Boolean),
       // Store bets as JSON array in betPlaced; fall back to 'no-bet' if none
       betPlaced: validBets.length > 0 ? JSON.stringify(validBets.map(b => ({ type: b.type, wagered: parseFloat(b.wagered) || 0, returned: parseFloat(b.returned) || 0 }))) : 'no-bet',
