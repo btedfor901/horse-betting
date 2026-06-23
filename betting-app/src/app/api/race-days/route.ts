@@ -3,13 +3,16 @@ import { prisma } from '@/lib/db';
 
 export async function GET() {
   try {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 30);
     const days = await prisma.raceDay.findMany({
       orderBy: { date: 'desc' },
+      take: 60,
+      where: { date: { gte: cutoff.toISOString().split('T')[0] } },
       include: {
         races: {
           orderBy: { number: 'asc' },
           include: {
-            horses: { orderBy: { postPosition: 'asc' } },
             scores: true,
             recommendation: true,
             result: true,
