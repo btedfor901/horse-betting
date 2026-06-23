@@ -11,12 +11,17 @@ export async function GET() {
       where: { date: { gte: cutoff.toISOString().split('T')[0] } },
       include: {
         races: {
-          orderBy: { number: 'asc' },
-          include: {
-            scores: true,
-            recommendation: true,
-            result: true,
+          select: {
+            id: true,
+            number: true,
+            distance: true,
+            surface: true,
+            postTime: true,
+            result: { select: { profitLoss: true, betPlaced: true } },
+            recommendation: { select: { betType: true, totalCost: true } },
+            _count: { select: { scores: true } },
           },
+          orderBy: { number: 'asc' },
         },
       },
     });

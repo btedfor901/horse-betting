@@ -15,18 +15,30 @@ interface Result { profitLoss: number; betPlaced: string; amountWagered: number;
 interface Score { rank: number; horseName: string; totalScore: number; }
 interface Race {
   id: string; number: number; distance: string; surface: string; postTime?: string;
-  recommendation?: Rec; result?: Result; scores: Score[];
+  recommendation?: Rec; result?: Result; scores?: Score[];
 }
 interface RaceDay { id: string; date: string; track: string; races: Race[]; }
 
 export default function Dashboard() {
   const [days, setDays] = useState<RaceDay[]>([]);
+  const [todayFull, setTodayFull] = useState<RaceDay | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
     Promise.all([api.getRaceDays(), api.getSettings()])
-      .then(([d, s]) => { setDays(d as RaceDay[]); setSettings(s as Settings); })
+      .then(([d, s]) => {
+        const list = d as RaceDay[];
+        setDays(list);
+        setSettings(s as Settings);
+        const todayEntry = list.find(x => x.date === today);
+        if (todayEntry) {
+          api.getRaceDay(todayEntry.id)
+            .then(full => setTodayFull(full as RaceDay))
+            .catch(console.error);
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
@@ -44,7 +56,7 @@ export default function Dashboard() {
   const totalWagered = bets.reduce((s, r) => s + r.amountWagered, 0);
   const roi = totalWagered > 0 ? totalPnL / totalWagered : 0;
 
-  const todayRaces = todayDay?.races ?? [];
+  const todayRaces = todayFull?.races ?? todayDay?.races ?? [];
   const todayPnL = todayRaces.reduce((s, r) => s + (r.result?.profitLoss ?? 0), 0);
   const todayBetsPlaced = todayRaces.filter(r => r.result && r.result.betPlaced !== 'no-bet').length;
   const todayBetsRec = todayRaces.filter(r => r.recommendation && r.recommendation.betType !== 'no-bet').length;
@@ -82,7 +94,7 @@ export default function Dashboard() {
         <div className="bg-slate-900 border border-slate-800 rounded-xl">
           <div className="flex items-center justify-between p-4 border-b border-slate-800">
             <div>
-              <div className="text-white font-semibold">Today's Card</div>
+              <div className="text-white font-semibold">Today&apos;s Card <span className="text-amber-400/70 font-normal text-sm">{todayDay.track}</span></div>
               <div className="text-slate-400 text-xs">{todayRaces.length} races · {todayBetsRec} bets recommended</div>
             </div>
             <div className="flex items-center gap-3">
@@ -159,7 +171,7 @@ export default function Dashboard() {
       )}
 
       {/* Daily limits */}
-      {todayDay && (
+      {(todayDay || todayFull) && (
         <div className="grid grid-cols-3 gap-3">
           {[
             { label: 'Stop-Loss', limit: settings.dailyStopLoss, current: Math.abs(Math.min(todayPnL, 0)), color: 'bg-red-500', show: todayPnL < 0 },
