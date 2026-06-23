@@ -73,7 +73,8 @@ const ALL_TRACKS = [
 ];
 
 const cliTracksArg = getArg('--tracks');
-const selectedNames = cliTracksArg ? JSON.parse(cliTracksArg) : null;
+const envTracksArg = process.env.TRACK_NAMES ? process.env.TRACK_NAMES.split(',').map(s => s.trim()) : null;
+const selectedNames = cliTracksArg ? JSON.parse(cliTracksArg) : envTracksArg;
 const TRACKS = selectedNames
   ? ALL_TRACKS.filter(t => selectedNames.includes(t.name))
   : ALL_TRACKS;
@@ -267,10 +268,29 @@ Rules:
 
   const advText = advMsg.content[0]?.text ?? '';
   const advData = parseJSON(advText, {});
-  const horses = Array.isArray(advData.horses) ? advData.horses : [];
+  let horses = Array.isArray(advData.horses) ? advData.horses : [];
   if (!horses.length) {
     console.warn('    Claude returned no horses from advanced tab');
     return null;
+  }
+
+  // Merge with DOM-extracted names to ensure no horse is missing from large fields
+  const domNamesPath = path.join(raceDir, 'dom-horses.json');
+  if (fs.existsSync(domNamesPath)) {
+    const domNames = JSON.parse(fs.readFileSync(domNamesPath, 'utf8'));
+    if (domNames.length > horses.length) {
+      console.log(`    DOM has ${domNames.length} horses vs Claude's ${horses.length} — merging`);
+      for (const domName of domNames) {
+        const already = horses.find(h =>
+          h.horseName?.toLowerCase().includes(domName.toLowerCase().split(' ')[0]) ||
+          domName.toLowerCase().includes((h.horseName ?? '').toLowerCase().split(' ')[0])
+        );
+        if (!already) {
+          horses.push({ postPosition: horses.length + 1, horseName: domName, morningLineOdds: '', jockeyName: '', trainerName: '' });
+          console.log(`    + Added missing horse: ${domName}`);
+        }
+      }
+    }
   }
 
   // ── Speed tab: speed figures ─────────────────────────────────────────────
@@ -288,7 +308,9 @@ Rules:
             text: `This is a TwinSpires Speed tab for Race ${raceNum}.
 Extract speed figures for every horse. Return ONLY a JSON array:
 [{"horseName":"Name","bestSpeed":95,"backSpeed":88,"speedLR":90,"avgSpeed":87}]
-- All values are numbers. Use null if not shown (e.g. first-time starter).
+- Speed figures are MULTI-DIGIT numbers typically 50-115 (Beyer-style). Do NOT return rank numbers (1,2,3,4...).
+- If a value looks like a rank/position (single digit 1-12 without context), use null instead.
+- Use null for any value not shown (first-time starters, etc).
 - horseName must match exactly as shown on the card.
 - Return ONLY the JSON array, no explanation.`,
           },
@@ -465,7 +487,18 @@ async function captureTab(page, filePath, r2Key) {
   try {
     await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
     await page.waitForTimeout(700);
-    await page.screenshot({ path: filePath, fullPage: false });
+    // Expand any scrollable containers (horse entry lists) so all rows are visible
+    await page.evaluate(() => {
+      document.querySelectorAll('*').forEach(el => {
+        const s = window.getComputedStyle(el);
+        if ((s.overflowY === 'auto' || s.overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 10) {
+          el.style.overflowY = 'visible';
+          el.style.maxHeight = 'none';
+          el.style.height = 'auto';
+        }
+      });
+    }).catch(() => {});
+    await page.screenshot({ path: filePath, fullPage: true });
     await uploadToR2(filePath, r2Key);
     return true;
   } catch {
@@ -479,15 +512,34 @@ async function captureTrack(page, track) {
 
   // Probe how many races exist by navigating via URL (advanced tab works fine by URL)
   const racesToCapture = [];
+  let prevDomNames = [];
   for (let r = 1; r <= MAX_RACES; r++) {
     const testUrl = urlForTab(urlForRace(baseUrl, r), 'advanced');
     const resp = await page.goto(testUrl, { waitUntil: 'domcontentloaded', timeout: 12000 });
     if (!resp || resp.status() === 404) { console.log(`  Race ${r} → 404, stopping.`); break; }
+    await page.waitForTimeout(1000);
+
+    // Check actual URL — if TwinSpires redirected to a different race number, stop
     const finalUrl = page.url();
-    if (r > 1 && finalUrl === urlForTab(urlForRace(baseUrl, 1), 'advanced')) {
-      console.log(`  Race ${r} redirected to Race 1 — stopping.`);
+    const urlRaceNum = parseInt(finalUrl.match(/\/(\d+)\/\w+$/)?.[1] ?? r);
+    if (urlRaceNum !== r) {
+      console.log(`  Race ${r} → redirected to Race ${urlRaceNum}, stopping.`);
       break;
     }
+
+    // Check DOM horse names — if same as previous race, TwinSpires is recycling content
+    const domNames = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('[class*="runner"] [class*="name"]'))
+        .map(el => el.textContent?.trim()).filter(Boolean)
+    ).catch(() => []);
+    if (r > 1 && domNames.length > 0 && prevDomNames.length > 0) {
+      const overlap = domNames.filter(n => prevDomNames.includes(n)).length;
+      if (overlap >= Math.min(domNames.length, prevDomNames.length) * 0.8) {
+        console.log(`  Race ${r} → same horses as Race ${r - 1} (not yet confirmed), stopping.`);
+        break;
+      }
+    }
+    prevDomNames = domNames;
     racesToCapture.push(r);
   }
 
@@ -510,17 +562,36 @@ async function captureTrack(page, track) {
     await page.locator('button:has-text("I Understand"), button:has-text("Accept All")')
       .first().click({ timeout: 3000 }).catch(() => {});
 
+    // DOM-extract horse names — authoritative list regardless of field size
+    const domNames = await page.evaluate(() => {
+      const runners = document.querySelectorAll('[class*="runner"]');
+      const names = [];
+      for (const r of runners) {
+        const n = r.querySelector('[class*="name"]')?.textContent?.trim();
+        if (n && n.length > 1) names.push(n);
+      }
+      return names;
+    }).catch(() => []);
+    if (domNames.length) {
+      fs.writeFileSync(path.join(dir, 'dom-horses.json'), JSON.stringify(domNames, null, 2));
+      console.log(`    DOM: ${domNames.length} horses — ${domNames.join(', ')}`);
+    }
+
     // Capture each tab by clicking the tab button in the UI
     for (const tab of TABS) {
       const filePath = path.join(dir, `${tab}.png`);
       const r2Key = `screenshots/${TODAY}/${slugify(track.name)}/race-${raceNum}/${tab}.png`;
 
       const label = TAB_LABELS[tab] ?? tab.toUpperCase();
-      // Click the tab button (e.g. "ADVANCED", "TIPS", "SUMMARY")
-      const tabBtn = page.locator(`button:has-text("${label}"), a:has-text("${label}"), [class*="tab"]:has-text("${label}")`).first();
-      if (await tabBtn.count()) {
-        await tabBtn.click({ force: true });
-        await page.waitForTimeout(600);
+      // Click the exact-match tab button — avoid matching column headers that contain the same word
+      try {
+        const tabBtn = page.locator(`button:text-is("${label}"), a:text-is("${label}")`).first();
+        if (await tabBtn.count()) {
+          await tabBtn.click({ force: true });
+          await page.waitForTimeout(600);
+        }
+      } catch (tabErr) {
+        console.log(`    – ${tab} click failed: ${tabErr.message.split('\n')[0]}`);
       }
 
       const ok = await captureTab(page, filePath, r2Key);
@@ -554,7 +625,9 @@ async function main() {
 
   const isCI = !!process.env.CI;
   const browser = await chromium.launch({ headless: isCI, slowMo: isCI ? 0 : 100 });
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  // No zoom — full-resolution screenshots so Claude can read small numbers accurately.
+  // Horse list completeness is handled by DOM extraction (dom-horses.json), not viewport size.
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
   const page = await context.newPage();
 
   await page.goto('https://www.twinspires.com/bet/todays-races/time', { waitUntil: 'domcontentloaded', timeout: 25000 });

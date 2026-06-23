@@ -376,6 +376,124 @@ function ScreenshotPanel({ date, track, raceNum }: { date: string; track: string
   );
 }
 
+const UPLOAD_TABS = [
+  { key: 'advanced', label: 'ADV', desc: 'Horses + basics' },
+  { key: 'speed',    label: 'SPD', desc: 'Speed figures' },
+  { key: 'class',    label: 'CLS', desc: 'Class ratings' },
+  { key: 'pace',     label: 'PCE', desc: 'Pace figures' },
+  { key: 'summary',  label: 'SUM', desc: 'Run style' },
+  { key: 'tips',     label: 'TPS', desc: 'Angles' },
+];
+
+function UploadPanel({ raceId, onDone }: { raceId: string; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [files, setFiles] = useState<Record<string, File>>({});
+  const [status, setStatus] = useState<Record<string, string>>({});
+  const [uploading, setUploading] = useState(false);
+
+  const handleFile = (tab: string, f: File | null) => {
+    if (!f) return;
+    setFiles(prev => ({ ...prev, [tab]: f }));
+    setStatus(prev => ({ ...prev, [tab]: 'ready' }));
+  };
+
+  const handleDrop = (tab: string, e: React.DragEvent) => {
+    e.preventDefault();
+    const f = e.dataTransfer.files[0];
+    if (f) handleFile(tab, f);
+  };
+
+  const uploadTab = async (tab: string, file: File) => {
+    setStatus(prev => ({ ...prev, [tab]: 'extracting…' }));
+    const form = new FormData();
+    form.append('tab', tab);
+    form.append('file', file);
+    const res = await fetch(`/api/races/${raceId}/extract-screenshot`, { method: 'POST', body: form });
+    const data = await res.json();
+    if (!res.ok) {
+      setStatus(prev => ({ ...prev, [tab]: `error: ${data.error}` }));
+      return false;
+    }
+    const info = tab === 'advanced'
+      ? `${data.extracted?.count ?? '?'} horses saved`
+      : `${data.extracted?.horsesUpdated ?? '?'} updated`;
+    setStatus(prev => ({ ...prev, [tab]: `done — ${info}` }));
+    return true;
+  };
+
+  const handleUploadAll = async () => {
+    if (!Object.keys(files).length) return;
+    setUploading(true);
+    // advanced first so horses exist before stats tabs run
+    const ordered = ['advanced', 'speed', 'class', 'pace', 'summary', 'tips'].filter(t => files[t]);
+    for (const tab of ordered) await uploadTab(tab, files[tab]);
+    setUploading(false);
+    onDone();
+  };
+
+  return (
+    <div className="bg-slate-900 border border-amber-600 rounded-xl overflow-hidden mb-5">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-amber-400 font-bold text-sm">Fix with Screenshots</span>
+          <span className="text-xs text-slate-400">Upload any TwinSpires tab to extract data</span>
+        </div>
+        <span className="text-slate-500 text-xs">{open ? '▲ hide' : '▼ show'}</span>
+      </button>
+
+      {open && (
+        <div className="border-t border-slate-800 p-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+            {UPLOAD_TABS.map(t => (
+              <div
+                key={t.key}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => handleDrop(t.key, e)}
+                className="relative border-2 border-dashed border-slate-700 rounded-lg p-3 text-center hover:border-amber-500 transition-colors"
+              >
+                <label className="cursor-pointer block">
+                  <div className="font-bold text-amber-400 text-sm">{t.label}</div>
+                  <div className="text-xs text-slate-500 mb-2">{t.desc}</div>
+                  {files[t.key] ? (
+                    <div className="text-xs text-green-400 truncate">{files[t.key].name}</div>
+                  ) : (
+                    <div className="text-xs text-slate-600">drop or click</div>
+                  )}
+                  {status[t.key] && (
+                    <div className={`text-xs mt-1 ${status[t.key].startsWith('done') ? 'text-green-400' : status[t.key].startsWith('error') ? 'text-red-400' : 'text-amber-400'}`}>
+                      {status[t.key]}
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                    onChange={e => handleFile(t.key, e.target.files?.[0] ?? null)}
+                  />
+                </label>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleUploadAll}
+              disabled={uploading || !Object.keys(files).length}
+              className="px-5 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-900 font-bold text-sm rounded-lg transition-colors"
+            >
+              {uploading ? 'Extracting…' : `Extract ${Object.keys(files).length} screenshot${Object.keys(files).length !== 1 ? 's' : ''}`}
+            </button>
+            <span className="text-xs text-slate-500">ADV replaces all horses. SPD/CLS/PCE/SUM/TPS update stats only.</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function RacePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -524,6 +642,14 @@ export default function RacePage() {
           </span>
         </span>
       </div>
+
+      <UploadPanel raceId={race.id} onDone={() => {
+        api.getRace(race.id).then(r => {
+          const updated = r as ApiRace;
+          setRace(updated);
+          setHorses(updated.horses.map(h => ({ ...h, _key: h.id })));
+        });
+      }} />
 
       {raceDay && (
         <ScreenshotPanel date={raceDay.date} track={raceDay.track} raceNum={race.number} />
