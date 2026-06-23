@@ -114,8 +114,8 @@ surface: dirt|turf|synthetic  raceType: claiming|maiden|maiden-claiming|allowanc
         for (const f of fields) if (row[f] !== undefined && row[f] !== null) data[f] = row[f];
         if (Object.keys(data).length === 0) continue;
 
-        await prisma.horseEntry.update({ where: { id: horse.id }, data });
-        updated++;
+        const count = await prisma.horseEntry.updateMany({ where: { id: horse.id, raceId: id }, data });
+        updated += count.count;
       }
       extracted = { rowsExtracted: rows.length, horsesUpdated: updated };
     }
