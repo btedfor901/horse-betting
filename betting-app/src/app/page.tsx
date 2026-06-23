@@ -195,6 +195,7 @@ export default function Dashboard() {
                 <Link key={day.id} href={`/race-day/${day.id}`} className="flex items-center justify-between bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-3 transition-colors">
                   <div>
                     <span className="text-white text-sm font-medium">{dateStr}</span>
+                    <span className="text-amber-400/70 text-xs ml-2">{day.track}</span>
                     <span className="text-slate-500 text-xs ml-2">{day.races.length} races · {betCount} bets</span>
                   </div>
                   {betCount > 0 && (
