@@ -92,6 +92,18 @@ export default function RaceDayPage() {
     }
   }
 
+  async function deleteRace(raceId: string, raceNumber: number, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm(`Delete Race ${raceNumber}? This cannot be undone.`)) return;
+    try {
+      await fetch(`/api/races/${raceId}`, { method: 'DELETE' });
+      setDay(prev => prev ? { ...prev, races: prev.races.filter(r => r.id !== raceId) } : prev);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   async function addRace() {
     if (!day) return;
     setAddingRace(true);
@@ -346,6 +358,13 @@ export default function RaceDayPage() {
                         {race.horses.length === 0 ? 'Enter horses →' : 'Pending'}
                       </span>
                     )}
+                    <button
+                      onClick={e => deleteRace(race.id, race.number, e)}
+                      className="ml-1 text-slate-600 hover:text-red-400 transition-colors text-lg leading-none"
+                      title="Delete race"
+                    >
+                      ×
+                    </button>
                   </div>
                 </div>
               </Link>
