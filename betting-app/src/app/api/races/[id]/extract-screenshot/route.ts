@@ -40,7 +40,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 {"distance":"6f","surface":"dirt","raceType":"claiming","horses":[{"postPosition":1,"horseName":"Name","morningLineOdds":"8/5","jockeyName":"Smith, J","jockeyWinPct":20,"trainerName":"Jones, B","trainerWinPct":15,"daysOff":14,"scratched":false}]}
 surface: dirt|turf|synthetic  raceType: claiming|maiden|maiden-claiming|allowance|stakes|handicap|optional-claiming  Return ONLY the JSON.` }] }],
       });
-      extracted = parseJSON(msg.content[0]?.text ?? '', {}) as Record<string, unknown>;
+      const textBlock = msg.content.find(b => b.type === 'text');
+      extracted = parseJSON(textBlock && 'text' in textBlock ? textBlock.text : '', {}) as Record<string, unknown>;
 
       // Full replace of horses from advanced tab
       if (Array.isArray((extracted as { horses?: unknown[] }).horses) && (extracted as { horses: unknown[] }).horses.length > 0) {
@@ -89,7 +90,8 @@ surface: dirt|turf|synthetic  raceType: claiming|maiden|maiden-claiming|allowanc
         messages: [{ role: 'user', content: [imgBlock, { type: 'text', text: prompt }] }],
       });
 
-      const rows = parseJSON(msg.content[0]?.text ?? '', []) as Record<string, unknown>[];
+      const textBlock2 = msg.content.find(b => b.type === 'text');
+      const rows = parseJSON(textBlock2 && 'text' in textBlock2 ? textBlock2.text : '', []) as Record<string, unknown>[];
       const fieldMap: Record<string, string[]> = {
         speed:   ['bestSpeed', 'backSpeed', 'speedLR', 'avgSpeed'],
         class:   ['primePower', 'avgClass', 'lastClass'],
